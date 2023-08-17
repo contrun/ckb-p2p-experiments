@@ -3,3 +3,9 @@
 members = [
     "p2p-node",
 ]
+
+[patch.crates-io]
+# TODO: ckb-testkit depends on this version, but is incompatiable with other versions.
+# The patch method here does not support features.
+# tentacle = { git = "https://github.com/nervosnetwork/tentacle.git", tag="0.4.0-alpha.2", package="tentacle", features = ["upnp", "parking_lot"] }
+tentacle = { git = "https://github.com/nervosnetwork/tentacle.git", tag="0.4.0-alpha.2", package="tentacle" }
