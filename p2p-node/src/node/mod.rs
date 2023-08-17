@@ -251,6 +251,7 @@ impl P2PServiceHandle for P2PNode {
 
     /// Handling session establishment and disconnection events
     fn handle_event(&mut self, context: &mut P2PServiceContext, event: P2PServiceEvent) {
+        log::debug!("P2PNode handle event: {:?}", event);
         match event {
             P2PServiceEvent::SessionOpen {
                 session_context: session,
@@ -280,9 +281,7 @@ impl P2PServiceHandle for P2PNode {
                     .write()
                     .map(|mut shared| shared.remove_session(&session.id));
             }
-            _ => {
-                unimplemented!()
-            }
+            _ => {}
         }
     }
 }
