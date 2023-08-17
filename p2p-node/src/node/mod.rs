@@ -187,7 +187,14 @@ impl P2PNode {
 }
 
 impl P2PServiceProtocol for P2PNode {
-    fn init(&mut self, context: &mut P2PProtocolContext) {}
+    fn init(&mut self, context: &mut P2PProtocolContext) {
+        let bootnodes = bootnodes(self.network_type);
+        for node in bootnodes {
+            log::debug!("Trying to dial {}", &node);
+            let dial_res = context.dial(node.clone(), P2PTargetProtocol::All);
+            log::debug!("Dial {} result: {:?}", &node, &dial_res);
+        }
+    }
 
     fn notify(&mut self, context: &mut P2PProtocolContext, token: u64) {}
 
