@@ -1,9 +1,11 @@
-use ckb_testkit::connector::SharedState;
-
+use ckb_testkit::{connector::SharedState, ConnectorBuilder};
+use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, Command};
 use std::env;
-
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+use tokio::signal;
 
 use p2p_node::network::CKBNetworkType;
 use p2p_node::node::P2PNode;
@@ -20,26 +22,26 @@ async fn main() -> Result<(), Error> {
     let networks: Vec<_> = matches.get_many::<String>("network").unwrap().collect();
     log::info!("Networks: {:?}", networks);
 
-    let network_types = networks
-        .into_iter()
-        .map(|x| CKBNetworkType::from(x.as_str()))
-        .collect::<Vec<CKBNetworkType>>();
-    // let mut _connectors = Vec::new();
+    let network_types: Result<Vec<CKBNetworkType>, _> = networks
+        .iter()
+        .map(|x| CKBNetworkType::try_from(x.as_str()))
+        .collect();
+    let mut _connectors = Vec::new();
 
-    for network in network_types.iter() {
+    for network in network_types?.into_iter() {
         log::info!("Start listening {:?}", network);
-        let _shared_state = Arc::new(RwLock::new(SharedState::new()));
-        let _node = P2PNode::new();
+        let shared_state = Arc::new(RwLock::new(SharedState::new()));
+        let node = P2PNode::new(network, shared_state.clone());
         // // workaround for Rust lifetime
-        // _connectors.push(
-        //     ConnectorBuilder::new()
-        //         .protocol_metas(node.build_protocol_metas())
-        //         .listening_addresses(vec![])
-        //         .build(node, shared),
-        // );
+        _connectors.push(
+            ConnectorBuilder::new()
+                .protocol_metas(node.build_protocol_metas())
+                .listening_addresses(vec![])
+                .build(node, shared_state),
+        );
     }
 
-    tokio::signal::ctrl_c().await?;
+    let _ = tokio::signal::ctrl_c().await?;
     log::info!("p2p node shutting down");
     Ok(())
 }

@@ -14,7 +14,7 @@ ckb-logger-config = "0.110.0"
 ckb-logger-service = "0.110.0"
 log = "0.4.20"
 p2p = { version="0.4.0-alpha.2", package="tentacle", features = ["upnp", "parking_lot"] }
-serde = "1.0.183"
+tokio-util = { version = "0.6", features = ["codec"] }
 thiserror = "1.0.47"
-anyhow = "1.0.75"
+serde = "1.0.183"
 

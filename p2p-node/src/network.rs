@@ -1,6 +1,7 @@
 use p2p::multiaddr::Multiaddr;
 use serde::Deserialize;
 use std::collections::HashSet;
+use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Deserialize)]
 pub enum CKBNetworkType {
@@ -9,20 +10,28 @@ pub enum CKBNetworkType {
     Dev,
 }
 
-impl From<&str> for CKBNetworkType {
-    fn from(s: &str) -> Self {
+#[derive(Error, Debug)]
+pub enum CKBNetworkTypeError {
+    #[error("Unknown network {0}")]
+    Unknown(String),
+}
+
+impl TryFrom<&str> for CKBNetworkType {
+    type Error = CKBNetworkTypeError;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "mirana" | "ckb" | "main" => CKBNetworkType::Mirana,
-            "pudge" | "ckb_testnet" | "test" => CKBNetworkType::Pudge,
-            "dev" | "ckb_dev" => CKBNetworkType::Dev,
-            _ => unreachable!(),
+            "mirana" | "ckb" | "main" => Ok(CKBNetworkType::Mirana),
+            "pudge" | "ckb_testnet" | "test" => Ok(CKBNetworkType::Pudge),
+            "dev" | "ckb_dev" => Ok(CKBNetworkType::Dev),
+            _ => Err(CKBNetworkTypeError::Unknown(s.to_string())),
         }
     }
 }
 
-impl From<String> for CKBNetworkType {
-    fn from(s: String) -> Self {
-        Self::from(s.as_str())
+impl TryFrom<String> for CKBNetworkType {
+    type Error = CKBNetworkTypeError;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
     }
 }
 

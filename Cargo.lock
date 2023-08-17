@@ -2074,7 +2074,6 @@ dependencies = [
 name = "p2p-node"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "ckb-logger-config",
  "ckb-logger-service",
  "ckb-testkit",
@@ -2084,6 +2083,7 @@ dependencies = [
  "tentacle",
  "thiserror",
  "tokio 1.32.0",
+ "tokio-util 0.6.10",
 ]
 
 [[package]]
