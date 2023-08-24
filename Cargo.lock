@@ -287,7 +287,7 @@ dependencies = [
  "snap",
  "tentacle",
  "tokio",
- "tokio-util 0.7.8",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1200,7 +1200,7 @@ dependencies = [
  "tentacle",
  "thiserror",
  "tokio",
- "tokio-util 0.6.10",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1607,7 +1607,7 @@ dependencies = [
  "tentacle-secio",
  "thiserror",
  "tokio",
- "tokio-util 0.7.8",
+ "tokio-util",
  "tokio-yamux",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1649,7 +1649,7 @@ dependencies = [
  "secp256k1",
  "sha2",
  "tokio",
- "tokio-util 0.7.8",
+ "tokio-util",
  "unsigned-varint",
  "x25519-dalek",
 ]
@@ -1758,20 +1758,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36943ee01a6d67977dd3f84a5a1d2efeb4ada3a1ae771cadfaa535d9d9fc6507"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-sink",
- "log",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
-name = "tokio-util"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "806fe8c2c87eccc8b3267cbae29ed3ab2d0bd37fca70ab622e46aaa9375ddb7d"
@@ -1795,7 +1781,7 @@ dependencies = [
  "log",
  "nohash-hasher",
  "tokio",
- "tokio-util 0.7.8",
+ "tokio-util",
 ]
 
 [[package]]

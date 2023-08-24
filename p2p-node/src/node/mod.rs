@@ -6,6 +6,7 @@ use ckb_connector::{
 use ckb_types::{packed, prelude::*};
 
 use p2p::{
+    async_trait,
     builder::MetaBuilder as P2PMetaBuilder,
     bytes::{Bytes, BytesMut},
     context::ProtocolContext as P2PProtocolContext,
@@ -23,7 +24,7 @@ use p2p::{
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-use tokio_util::codec::{length_delimited::LengthDelimitedCodec, Decoder, Encoder};
+use tokio_util::codec::{length_delimited::LengthDelimitedCodec, Encoder};
 
 #[derive(Clone)]
 pub struct P2PNode {
@@ -68,7 +69,7 @@ impl P2PNode {
         ]
     }
 
-    fn received_identify(&mut self, context: P2PProtocolContextMutRef, data: Bytes) {
+    async fn received_identify(&mut self, context: P2PProtocolContextMutRef<'_>, data: Bytes) {
         match packed::IdentifyMessage::from_compatible_slice(data.as_ref()) {
             Ok(message) => {
                 match packed::Identify::from_compatible_slice(
@@ -114,7 +115,7 @@ impl P2PNode {
     }
 
     #[allow(clippy::only_used_in_recursion)]
-    fn received_discovery(&mut self, context: P2PProtocolContextMutRef, data: Bytes) {
+    async fn received_discovery(&mut self, context: P2PProtocolContextMutRef<'_>, data: Bytes) {
         match packed::DiscoveryMessage::from_compatible_slice(data.as_ref()) {
             Ok(message) => {
                 match message.payload().to_enum() {
@@ -131,24 +132,20 @@ impl P2PNode {
                 }
             }
             Err(err) => {
-                // ckb2019, before hard fork
-                let mut data = BytesMut::from(data.as_ref());
-                let mut codec = LengthDelimitedCodec::new();
-                match codec.decode(&mut data) {
-                    Ok(Some(frame)) => self.received_discovery(context, frame.freeze()),
-                    _ => {
-                        log::error!(
-                            "P2PNode received invalid DiscoveryMessage, address: {}, error: {:?}",
-                            context.session.address,
-                            err
-                        );
-                    }
-                }
+                log::error!(
+                    "P2PNode received invalid DiscoveryMessage, address: {}, error: {:?}",
+                    context.session.address,
+                    err
+                );
             }
         }
     }
 
-    fn connected_discovery(&mut self, context: P2PProtocolContextMutRef, protocol_version: &str) {
+    async fn connected_discovery(
+        &mut self,
+        context: P2PProtocolContextMutRef<'_>,
+        protocol_version: &str,
+    ) {
         let discovery_get_node_message = build_discovery_get_nodes(None, 1000u32, 1u32);
         if protocol_version == "0.0.1" {
             let mut codec = LengthDelimitedCodec::new();
@@ -157,27 +154,28 @@ impl P2PNode {
                 .encode(discovery_get_node_message.as_bytes(), &mut bytes)
                 .expect("encode must be success");
             let message_bytes = bytes.freeze();
-            context.send_message(message_bytes).unwrap();
+            context.send_message(message_bytes).await.unwrap();
         } else {
             let message_bytes = discovery_get_node_message.as_bytes();
-            context.send_message(message_bytes).unwrap();
+            context.send_message(message_bytes).await.unwrap();
         }
     }
 }
 
+#[async_trait]
 impl P2PServiceProtocol for P2PNode {
-    fn init(&mut self, context: &mut P2PProtocolContext) {
+    async fn init(&mut self, context: &mut P2PProtocolContext) {
         let bootnodes = get_bootnodes(self.network_type);
         for node in bootnodes {
             log::debug!("Trying to dial {}", &node);
-            let dial_res = context.dial(node.clone(), P2PTargetProtocol::All);
+            let dial_res = context.dial(node.clone(), P2PTargetProtocol::All).await;
             log::debug!("Dial {} result: {:?}", &node, &dial_res);
         }
     }
 
-    fn notify(&mut self, _context: &mut P2PProtocolContext, _token: u64) {}
+    async fn notify(&mut self, _context: &mut P2PProtocolContext, _token: u64) {}
 
-    fn connected(&mut self, context: P2PProtocolContextMutRef, protocol_version: &str) {
+    async fn connected(&mut self, context: P2PProtocolContextMutRef<'_>, protocol_version: &str) {
         log::debug!(
             "P2PNode open protocol, protocol_name: {} address: {}",
             context
@@ -192,11 +190,11 @@ impl P2PServiceProtocol for P2PNode {
         }
 
         if context.proto_id() == SupportProtocols::Discovery.protocol_id() {
-            self.connected_discovery(context, protocol_version)
+            self.connected_discovery(context, protocol_version).await
         }
     }
 
-    fn disconnected(&mut self, context: P2PProtocolContextMutRef) {
+    async fn disconnected(&mut self, context: P2PProtocolContextMutRef<'_>) {
         log::debug!(
             "P2PNode close protocol, protocol_name: {}, address: {:?}",
             context
@@ -211,17 +209,18 @@ impl P2PServiceProtocol for P2PNode {
         }
     }
 
-    fn received(&mut self, context: P2PProtocolContextMutRef, data: Bytes) {
+    async fn received(&mut self, context: P2PProtocolContextMutRef<'_>, data: Bytes) {
         if context.proto_id == SupportProtocols::Discovery.protocol_id() {
-            self.received_discovery(context, data)
+            self.received_discovery(context, data).await
         } else if context.proto_id == SupportProtocols::Identify.protocol_id() {
-            self.received_identify(context, data)
+            self.received_identify(context, data).await
         }
     }
 }
 
+#[async_trait]
 impl P2PServiceHandle for P2PNode {
-    fn handle_error(&mut self, _context: &mut P2PServiceContext, error: P2PServiceError) {
+    async fn handle_error(&mut self, _context: &mut P2PServiceContext, error: P2PServiceError) {
         match &error {
             P2PServiceError::DialerError { address, error } => {
                 log::error!("dialing to {} failed: {}", address, error)
@@ -236,7 +235,7 @@ impl P2PServiceHandle for P2PNode {
     }
 
     /// Handling session establishment and disconnection events
-    fn handle_event(&mut self, context: &mut P2PServiceContext, event: P2PServiceEvent) {
+    async fn handle_event(&mut self, context: &mut P2PServiceContext, event: P2PServiceEvent) {
         log::debug!("P2PNode handle event: {:?}", event);
         match event {
             P2PServiceEvent::SessionOpen {
