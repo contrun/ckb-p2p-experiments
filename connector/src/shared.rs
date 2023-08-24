@@ -2,25 +2,26 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use p2p::{bytes::Bytes, context::SessionContext, multiaddr::Multiaddr, ProtocolId, SessionId};
 use std::collections::HashMap;
 
+type SessionManager = HashMap<
+    SessionId,
+    (
+        SessionContext,
+        HashMap<ProtocolId, (Sender<Bytes>, Receiver<Bytes>)>,
+    ),
+>;
+
 /// Shared state between protocol handlers and service handler. As it is used across multiple
 /// protocols, it should be wrapped into `Arc<RwLock<SharedState>>`.
+#[derive(Default)]
 pub struct SharedState {
     /// Session manager, #{ session.id => ( session, #{ protocol.id => mailbox } ) }
-    session_manager: HashMap<
-        SessionId,
-        (
-            SessionContext,
-            HashMap<ProtocolId, (Sender<Bytes>, Receiver<Bytes>)>,
-        ),
-    >,
+    session_manager: SessionManager,
 }
 
 impl SharedState {
     /// Create a shared state.
     pub fn new() -> Self {
-        Self {
-            session_manager: HashMap::new(),
-        }
+        Default::default()
     }
 
     pub fn add_session(&mut self, session: SessionContext) {

@@ -27,8 +27,8 @@ pub fn build_identify_message(
                 .set(
                     identify_self_defined_payload
                         .as_bytes()
-                        .to_vec()
-                        .into_iter()
+                        .iter()
+                        .copied()
                         .map(Into::into)
                         .collect(),
                 )
