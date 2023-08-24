@@ -1,21 +1,19 @@
-use crate::network::{bootnodes, CKBNetworkType};
+use crate::network::{get_bootnodes, CKBNetworkType};
 
 use ckb_testkit::connector::message::build_discovery_get_nodes;
 use ckb_testkit::{
     ckb_types::{packed, prelude::*},
     compress,
     connector::SharedState,
-    decompress, Node, SupportProtocols,
+    decompress, SupportProtocols,
 };
-use p2p::error::{DialerErrorKind, SendErrorKind};
+
 use p2p::{
     builder::MetaBuilder as P2PMetaBuilder,
     bytes::{Bytes, BytesMut},
     context::ProtocolContext as P2PProtocolContext,
     context::ProtocolContextMutRef as P2PProtocolContextMutRef,
     context::ServiceContext as P2PServiceContext,
-    context::SessionContext,
-    multiaddr::Multiaddr,
     service::ProtocolHandle as P2PProtocolHandle,
     service::ProtocolMeta as P2PProtocolMeta,
     service::ServiceError as P2PServiceError,
@@ -24,28 +22,11 @@ use p2p::{
     traits::ServiceHandle as P2PServiceHandle,
     traits::ServiceProtocol as P2PServiceProtocol,
 };
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::error::Error;
-use std::ops::Mul;
-use std::str::FromStr;
+
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use tokio::runtime::Handle;
+use std::time::Instant;
+
 use tokio_util::codec::{length_delimited::LengthDelimitedCodec, Decoder, Encoder};
-
-// TODO Adjust the parameters
-const DIAL_ONLINE_ADDRESSES_INTERVAL: Duration = Duration::from_secs(1);
-const PRUNE_OFFLINE_ADDRESSES_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24);
-
-const DISCONNECT_TIMEOUT_SESSION_INTERVAL: Duration = Duration::from_secs(10);
-const POSTGRES_ONLINE_ADDRESS_INTERVAL: Duration = Duration::from_secs(60);
-const DIAL_ONLINE_ADDRESSES_TOKEN: u64 = 1;
-const PRUNE_OFFLINE_ADDRESSES_TOKEN: u64 = 2;
-const DISCONNECT_TIMEOUT_SESSION_TOKEN: u64 = 3;
-const POSTGRES_ONLINE_ADDRESSES_TOKEN: u64 = 4;
-
-const ADDRESS_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub struct P2PNode {
@@ -99,16 +80,16 @@ impl P2PNode {
                     Ok(identify_payload) => {
                         let client_version_vec: Vec<u8> =
                             identify_payload.client_version().unpack();
-                        let client_version =
+                        let _client_version =
                             String::from_utf8_lossy(&client_version_vec).to_string();
 
-                        let client_name_vec: Vec<u8> = identify_payload.name().unpack();
+                        let _client_name_vec: Vec<u8> = identify_payload.name().unpack();
 
                         let client_flag: u64 = identify_payload.flag().unpack();
 
                         // protocol is private mod in ckb, use the bitflag map directly
                         // since a light node can't provide LIGHT_CLIENT serv but full node can, use this as a workaround
-                        let is_full_node = (client_flag & 0b10000) == 0b10000;
+                        let _is_full_node = (client_flag & 0b10000) == 0b10000;
 
                         log::info!(
                             "P2PNode received IdentifyMessage, address: {}, time: {:?}",
@@ -135,6 +116,7 @@ impl P2PNode {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn received_discovery(&mut self, context: P2PProtocolContextMutRef, data: Bytes) {
         match packed::DiscoveryMessage::from_compatible_slice(data.as_ref()) {
             Ok(message) => {
@@ -188,7 +170,7 @@ impl P2PNode {
 
 impl P2PServiceProtocol for P2PNode {
     fn init(&mut self, context: &mut P2PProtocolContext) {
-        let bootnodes = bootnodes(self.network_type);
+        let bootnodes = get_bootnodes(self.network_type);
         for node in bootnodes {
             log::debug!("Trying to dial {}", &node);
             let dial_res = context.dial(node.clone(), P2PTargetProtocol::All);
@@ -196,7 +178,7 @@ impl P2PServiceProtocol for P2PNode {
         }
     }
 
-    fn notify(&mut self, context: &mut P2PProtocolContext, token: u64) {}
+    fn notify(&mut self, _context: &mut P2PProtocolContext, _token: u64) {}
 
     fn connected(&mut self, context: P2PProtocolContextMutRef, protocol_version: &str) {
         log::debug!(

@@ -1,12 +1,10 @@
 use ckb_testkit::{connector::SharedState, ConnectorBuilder};
-use clap::parser::ValuesRef;
+
 use clap::{crate_version, Arg, Command};
 use p2p::multiaddr::Multiaddr;
 use std::env;
-use std::path::PathBuf;
+
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use tokio::signal;
 
 use p2p_node::network::CKBNetworkType;
 use p2p_node::node::P2PNode;
@@ -40,7 +38,7 @@ async fn main() -> Result<(), Error> {
         .listening_addresses(vec![listening_address])
         .build(node, shared_state);
 
-    let _ = tokio::signal::ctrl_c().await?;
+    tokio::signal::ctrl_c().await?;
     log::info!("p2p node shutting down");
     Ok(())
 }

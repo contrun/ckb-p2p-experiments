@@ -1,6 +1,5 @@
 use p2p::multiaddr::Multiaddr;
 use serde::Deserialize;
-use std::collections::HashSet;
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Deserialize)]
@@ -45,9 +44,8 @@ impl CKBNetworkType {
     }
 }
 
-#[allow(clippy::mutable_key_type)]
-pub fn bootnodes(network: CKBNetworkType) -> HashSet<Multiaddr> {
-    let bootnode = match network {
+pub fn get_bootnodes(network: CKBNetworkType) -> Vec<Multiaddr> {
+    let bootnodes = match network {
         CKBNetworkType::Mirana => [
             "/ip4/47.110.15.57/tcp/8114/p2p/QmXS4Kbc9HEeykHUTJCm2tNmqghbvWyYpUp6BtE5b6VrAU",
             "/ip4/13.234.144.148/tcp/8114/p2p/QmbT7QimcrcD5k2znoJiWpxoESxang6z1Gy9wof1rT1LKR",
@@ -78,11 +76,10 @@ pub fn bootnodes(network: CKBNetworkType) -> HashSet<Multiaddr> {
             // Use local node
             ["/ip4/127.0.0.1/tcp/8114"].to_vec()
         }
-        _ => unreachable!(),
     };
-    let mut bootnodes: HashSet<Multiaddr> = HashSet::new();
-    for addr in bootnode {
-        bootnodes.insert(addr.parse().unwrap());
-    }
     bootnodes
+        .as_slice()
+        .iter()
+        .map(|x| x.parse().unwrap())
+        .collect()
 }
