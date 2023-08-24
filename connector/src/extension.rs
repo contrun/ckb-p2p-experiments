@@ -5,7 +5,6 @@ use super::{
     },
     Connector, SupportProtocols,
 };
-use crate::Node;
 use ckb_types::{
     bytes::Bytes,
     core::{Cycle, TransactionView},
@@ -19,7 +18,7 @@ use std::time::Duration;
 impl Connector {
     pub fn send_relay_transaction(
         &self,
-        node: &Node,
+        node_addr: &Multiaddr,
         relay_protocol: SupportProtocols,
         transaction: &TransactionView,
         cycles: Cycle,
@@ -29,13 +28,13 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction(transaction, cycles);
-        self.send(&node, relay_protocol, message.as_bytes())?;
+        self.send(node_addr, relay_protocol, message.as_bytes())?;
         Ok(())
     }
 
     pub fn send_relay_transaction_hash(
         &self,
-        node: &Node,
+        node_addr: &Multiaddr,
         relay_protocol: SupportProtocols,
         hashes: Vec<packed::Byte32>,
     ) -> Result<(), String> {
@@ -44,13 +43,13 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction_hashes(hashes);
-        self.send(node, relay_protocol, message.as_bytes())?;
+        self.send(node_addr, relay_protocol, message.as_bytes())?;
         Ok(())
     }
 
     pub fn send_identify_message(
         &self,
-        node: &Node,
+        node_addr: &Multiaddr,
         network_identifier: &str,
         client_version: &str,
         listening_addresses: Vec<Multiaddr>,
@@ -62,38 +61,41 @@ impl Connector {
             listening_addresses,
             observed_address,
         );
-        self.send(node, SupportProtocols::Identify, message.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Identify, message.as_bytes())?;
         Ok(())
     }
 
     pub fn send_discovery_get_nodes(
         &self,
-        node: &Node,
+        node_addr: &Multiaddr,
         listening_port: Option<u16>,
         max_nodes: u32,
         self_defined_flag: u32,
     ) -> Result<(), String> {
         let discovery = build_discovery_get_nodes(listening_port, max_nodes, self_defined_flag);
-        self.send(node, SupportProtocols::Discovery, discovery.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes())?;
         Ok(())
     }
 
     pub fn send_discovery_nodes(
         &self,
-        node: &Node,
+        node_addr: &Multiaddr,
         active_push: bool,
         addresses: Vec<Multiaddr>,
     ) -> Result<(), String> {
         let message = build_discovery_nodes(active_push, addresses);
-        self.send(node, SupportProtocols::Discovery, message.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes())?;
         Ok(())
     }
 
-    pub fn recv(&self, node: &Node, protocol: &SupportProtocols) -> Result<Bytes, String> {
-        let session = self.get_session(node).ok_or(format!(
-            "session to {} is notfound",
-            node.p2p_address_with_node_id()
-        ))?;
+    pub fn recv(
+        &self,
+        node_addr: &Multiaddr,
+        protocol: &SupportProtocols,
+    ) -> Result<Bytes, String> {
+        let session = self
+            .get_session(node_addr)
+            .ok_or(format!("session to {} is notfound", node_addr))?;
         let receiver = {
             let shared = self.shared.read().unwrap();
             shared
@@ -101,7 +103,7 @@ impl Connector {
                 .ok_or(format!(
                     "protocol \"{}\" to {} is notfound",
                     protocol.name(),
-                    node.p2p_address_with_node_id()
+                    node_addr
                 ))?
         };
         receiver.recv().map_err(|err| format!("{:?}", err))
@@ -110,13 +112,12 @@ impl Connector {
     pub fn recv_timeout(
         &self,
         timeout: Duration,
-        node: &Node,
+        node_addr: &Multiaddr,
         protocol: &SupportProtocols,
     ) -> Result<Bytes, String> {
-        let session = self.get_session(node).ok_or(format!(
-            "session to {} is notfound",
-            node.p2p_address_with_node_id()
-        ))?;
+        let session = self
+            .get_session(node_addr)
+            .ok_or(format!("session to {} is notfound", node_addr))?;
         let receiver = {
             let shared = self.shared.read().unwrap();
             shared
@@ -124,7 +125,7 @@ impl Connector {
                 .ok_or(format!(
                     "protocol \"{}\" to {} is notfound",
                     protocol.name(),
-                    node.p2p_address_with_node_id()
+                    node_addr
                 ))?
         };
         receiver

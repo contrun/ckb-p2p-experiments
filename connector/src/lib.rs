@@ -13,7 +13,6 @@ pub use simple_protocol_handler::SimpleProtocolHandler;
 pub use simple_service_handler::SimpleServiceHandler;
 pub use support_protocols::SupportProtocols;
 
-use crate::Node;
 use ckb_stop_handler::{SignalSender, StopHandler};
 use futures::prelude::*;
 use p2p::{
@@ -184,7 +183,7 @@ impl ConnectorBuilder {
         p2p_service_builder
             .forever(true)
             .key_pair(self.key_pair.clone())
-            .yamux_config(self.yamux_config.clone())
+            .yamux_config(self.yamux_config)
             .set_send_buffer_size(self.send_buffer_size)
             .set_recv_buffer_size(self.recv_buffer_size)
             .build(service_handle)
@@ -193,22 +192,20 @@ impl ConnectorBuilder {
 
 impl Connector {
     /// Try to establish connection with `node`. This function blocks until all protocols opened.
-    pub fn connect(&mut self, node: &Node) -> Result<(), String> {
-        // Open all protocols connection to target node
-        let node_addr = node.p2p_address_with_node_id().parse().unwrap();
+    pub fn connect(&mut self, node_addr: &Multiaddr) -> Result<(), String> {
         crate::info!(
             "Connector try to make session establishment and open protocols to node \"{}\", protocols: {:?}",
             node_addr, self.p2p_service_controller.protocols(),
         );
         self.p2p_service_controller
-            .dial(node_addr, P2PTargetProtocol::All)
+            .dial(node_addr.clone(), P2PTargetProtocol::All)
             .map_err(|err| format!("Connector dial error: {:?}", err))?;
 
         // Wait for all protocols connections establishment
         let start_time = Instant::now();
         let mut last_logging_time = Instant::now();
         while start_time.elapsed() <= Duration::from_secs(5) {
-            if let Some(opened_protocol_ids) = self.get_opened_protocol_ids(node) {
+            if let Some(opened_protocol_ids) = self.get_opened_protocol_ids(node_addr) {
                 let expected_opened = self
                     .p2p_service_controller
                     .protocols()
@@ -227,7 +224,7 @@ impl Connector {
                     last_logging_time = Instant::now();
                     crate::debug!(
                         "Connector is waiting protocols establishment to node \"{}\", trying protocols: {:?}, opened protocols: {:?}",
-                        node.node_name(), self.p2p_service_controller.protocols(), opened_protocol_ids,
+                        node_addr, self.p2p_service_controller.protocols(), opened_protocol_ids,
                     );
                 }
                 sleep(Duration::from_millis(100));
@@ -236,7 +233,7 @@ impl Connector {
                     last_logging_time = Instant::now();
                     crate::debug!(
                         "Connector is waiting session establishment to node \"{}\"",
-                        node.node_name()
+                        node_addr
                     );
                 }
                 sleep(Duration::from_millis(100));
@@ -245,45 +242,45 @@ impl Connector {
 
         Err(format!(
             "Connector is timeout when connecting to {}",
-            node.node_name()
+            node_addr
         ))
     }
 
     /// Send `data` through the protocol of the session
-    pub fn send(&self, node: &Node, protocol: SupportProtocols, data: Bytes) -> Result<(), String> {
-        let session = self.get_session(node).ok_or_else(|| {
-            format!(
-                "The connection was disconnected to \"{}\"",
-                node.node_name()
-            )
-        })?;
+    pub fn send(
+        &self,
+        node_addr: &Multiaddr,
+        protocol: SupportProtocols,
+        data: Bytes,
+    ) -> Result<(), String> {
+        let session = self
+            .get_session(node_addr)
+            .ok_or_else(|| format!("The connection was disconnected to \"{}\"", node_addr))?;
         self.p2p_service_controller
             .send_message_to(session.id, protocol.protocol_id(), data)
             .map_err(|err| {
                 format!(
                     "Connector send message under protocol \"{}\" to \"{}\", error: {:?}",
                     protocol.name(),
-                    node.node_name(),
+                    node_addr,
                     err
                 )
             })
     }
 
     /// Return the session corresponding to the `node` if connected.
-    pub fn get_session(&self, node: &Node) -> Option<SessionContext> {
+    pub fn get_session(&self, node_addr: &Multiaddr) -> Option<SessionContext> {
         if let Ok(shared) = self.shared.read() {
-            let node_connected_addr = node.p2p_address_with_node_id().parse().unwrap();
-            return shared.get_session(&node_connected_addr);
+            return shared.get_session(node_addr);
         }
         unreachable!()
     }
 
     /// Return the opened protocols of the session corresponding to the `node` if connected
-    pub fn get_opened_protocol_ids(&self, node: &Node) -> Option<Vec<ProtocolId>> {
+    pub fn get_opened_protocol_ids(&self, node_addr: &Multiaddr) -> Option<Vec<ProtocolId>> {
         if let Ok(shared) = self.shared.read() {
-            let node_connected_addr = node.p2p_address_with_node_id().parse().unwrap();
             return shared
-                .get_session(&node_connected_addr)
+                .get_session(node_addr)
                 .and_then(|session| shared.get_opened_protocol_ids(&session.id));
         }
         unreachable!()
