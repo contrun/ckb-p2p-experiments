@@ -383,6 +383,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ckb-connector"
+version = "0.1.0"
+dependencies = [
+ "ckb-stop-handler",
+ "ckb-types 0.101.4",
+ "crossbeam",
+ "futures 0.3.28",
+ "log",
+ "snap",
+ "tentacle",
+ "tokio 1.32.0",
+ "tokio-util 0.6.10",
+]
+
+[[package]]
 name = "ckb-crypto"
 version = "0.101.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

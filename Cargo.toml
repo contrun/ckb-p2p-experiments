@@ -2,6 +2,7 @@
 
 members = [
     "p2p-node",
+    "connector",
 ]
 
 [patch.crates-io]
