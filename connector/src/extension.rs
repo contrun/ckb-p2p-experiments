@@ -16,7 +16,7 @@ use p2p::multiaddr::Multiaddr;
 use std::time::Duration;
 
 impl Connector {
-    pub fn send_relay_transaction(
+    pub async fn send_relay_transaction(
         &self,
         node_addr: &Multiaddr,
         relay_protocol: SupportProtocols,
@@ -28,11 +28,11 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction(transaction, cycles);
-        self.send(node_addr, relay_protocol, message.as_bytes())?;
+        self.send(node_addr, relay_protocol, message.as_bytes()).await?;
         Ok(())
     }
 
-    pub fn send_relay_transaction_hash(
+    pub async fn send_relay_transaction_hash(
         &self,
         node_addr: &Multiaddr,
         relay_protocol: SupportProtocols,
@@ -43,11 +43,11 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction_hashes(hashes);
-        self.send(node_addr, relay_protocol, message.as_bytes())?;
+        self.send(node_addr, relay_protocol, message.as_bytes()).await?;
         Ok(())
     }
 
-    pub fn send_identify_message(
+    pub async fn send_identify_message(
         &self,
         node_addr: &Multiaddr,
         network_identifier: &str,
@@ -61,11 +61,11 @@ impl Connector {
             listening_addresses,
             observed_address,
         );
-        self.send(node_addr, SupportProtocols::Identify, message.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Identify, message.as_bytes()).await?;
         Ok(())
     }
 
-    pub fn send_discovery_get_nodes(
+    pub async fn send_discovery_get_nodes(
         &self,
         node_addr: &Multiaddr,
         listening_port: Option<u16>,
@@ -73,18 +73,18 @@ impl Connector {
         self_defined_flag: u32,
     ) -> Result<(), String> {
         let discovery = build_discovery_get_nodes(listening_port, max_nodes, self_defined_flag);
-        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes()).await?;
         Ok(())
     }
 
-    pub fn send_discovery_nodes(
+    pub async fn send_discovery_nodes(
         &self,
         node_addr: &Multiaddr,
         active_push: bool,
         addresses: Vec<Multiaddr>,
     ) -> Result<(), String> {
         let message = build_discovery_nodes(active_push, addresses);
-        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes())?;
+        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes()).await?;
         Ok(())
     }
 

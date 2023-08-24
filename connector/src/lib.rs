@@ -14,11 +14,10 @@ pub use simple_service_handler::SimpleServiceHandler;
 pub use support_protocols::SupportProtocols;
 
 use ckb_stop_handler::{SignalSender, StopHandler};
-use futures::prelude::*;
 use p2p::{
     builder::ServiceBuilder, bytes::Bytes, context::SessionContext, multiaddr::Multiaddr,
     secio::SecioKeyPair, service::ProtocolMeta as P2PProtocolMeta, service::Service as P2PService,
-    service::ServiceControl as P2PServiceControl, service::TargetProtocol as P2PTargetProtocol,
+    service::ServiceAsyncControl as P2PServiceAsyncControl, service::TargetProtocol as P2PTargetProtocol,
     traits::ServiceHandle as P2PServiceHandle, yamux::Config as YamuxConfig, ProtocolId,
 };
 use std::collections::HashSet;
@@ -46,7 +45,7 @@ pub struct Connector {
     #[allow(dead_code)]
     key_pair: SecioKeyPair,
     shared: Arc<RwLock<SharedState>>,
-    p2p_service_controller: P2PServiceControl,
+    p2p_service_controller: P2PServiceAsyncControl,
     _stop_handler: StopHandler<tokio::sync::oneshot::Sender<()>>,
 }
 
@@ -149,7 +148,7 @@ impl ConnectorBuilder {
                 let p2p_service_controller = p2p_service.control().to_owned();
                 loop {
                     tokio::select! {
-                        Some(_) = p2p_service.next() => {},
+                        _ = p2p_service.run() => {},
                         _ = &mut stopped_signal_receiver => {
                             let _ = p2p_service_controller.shutdown();
                             break;
@@ -192,13 +191,14 @@ impl ConnectorBuilder {
 
 impl Connector {
     /// Try to establish connection with `node`. This function blocks until all protocols opened.
-    pub fn connect(&mut self, node_addr: &Multiaddr) -> Result<(), String> {
+    pub async fn connect(&mut self, node_addr: &Multiaddr) -> Result<(), String> {
         crate::info!(
             "Connector try to make session establishment and open protocols to node \"{}\", protocols: {:?}",
             node_addr, self.p2p_service_controller.protocols(),
         );
         self.p2p_service_controller
             .dial(node_addr.clone(), P2PTargetProtocol::All)
+            .await
             .map_err(|err| format!("Connector dial error: {:?}", err))?;
 
         // Wait for all protocols connections establishment
@@ -247,7 +247,7 @@ impl Connector {
     }
 
     /// Send `data` through the protocol of the session
-    pub fn send(
+    pub async fn send(
         &self,
         node_addr: &Multiaddr,
         protocol: SupportProtocols,
@@ -258,6 +258,7 @@ impl Connector {
             .ok_or_else(|| format!("The connection was disconnected to \"{}\"", node_addr))?;
         self.p2p_service_controller
             .send_message_to(session.id, protocol.protocol_id(), data)
+            .await
             .map_err(|err| {
                 format!(
                     "Connector send message under protocol \"{}\" to \"{}\", error: {:?}",
@@ -292,7 +293,7 @@ impl Connector {
     }
 
     /// Return the P2P service controller
-    pub fn p2p_service_controller(&self) -> &P2PServiceControl {
+    pub fn p2p_service_controller(&self) -> &P2PServiceAsyncControl {
         &self.p2p_service_controller
     }
 

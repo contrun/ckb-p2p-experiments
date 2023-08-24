@@ -2,6 +2,7 @@ use super::compress::{compress, decompress};
 use super::SharedState;
 use super::SupportProtocols;
 use p2p::{
+    async_trait,
     builder::MetaBuilder as P2PMetaBuilder,
     bytes,
     context::{ProtocolContext, ProtocolContextMutRef},
@@ -38,10 +39,11 @@ impl SimpleProtocolHandler {
     }
 }
 
+#[async_trait]
 impl P2PServiceProtocol for SimpleProtocolHandler {
-    fn init(&mut self, _context: &mut ProtocolContext) {}
+    async fn init(&mut self, _context: &mut ProtocolContext) {}
 
-    fn connected(&mut self, context: ProtocolContextMutRef, _protocol_version: &str) {
+    async fn connected(&mut self, context: ProtocolContextMutRef<'_>, _protocol_version: &str) {
         crate::debug!(
             "SimpleProtocolHandler connected, protocol: {}, session: {:?}",
             self.protocol.name(),
@@ -52,7 +54,7 @@ impl P2PServiceProtocol for SimpleProtocolHandler {
         }
     }
 
-    fn disconnected(&mut self, context: ProtocolContextMutRef) {
+    async fn disconnected(&mut self, context: ProtocolContextMutRef<'_>) {
         crate::debug!(
             "SimpleProtocolHandler disconnected, protocol: {}, session: {:?}",
             self.protocol.name(),
@@ -63,7 +65,7 @@ impl P2PServiceProtocol for SimpleProtocolHandler {
         }
     }
 
-    fn received(&mut self, context: ProtocolContextMutRef, data: bytes::Bytes) {
+    async fn received(&mut self, context: ProtocolContextMutRef<'_>, data: bytes::Bytes) {
         crate::debug!(
             "SimpleProtocolHandler received, protocol: {}, session: {:?}",
             self.protocol.name(),

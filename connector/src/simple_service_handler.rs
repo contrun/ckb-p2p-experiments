@@ -1,5 +1,6 @@
 use super::SharedState;
 use p2p::{
+    async_trait,
     context::ServiceContext as P2PServiceContext, service::ServiceError as P2PServiceError,
     service::ServiceEvent as P2PServiceEvent, traits::ServiceHandle as P2PServiceHandle,
 };
@@ -18,14 +19,15 @@ impl SimpleServiceHandler {
     }
 }
 
+#[async_trait]
 impl P2PServiceHandle for SimpleServiceHandler {
     /// Handling runtime errors
-    fn handle_error(&mut self, _control: &mut P2PServiceContext, error: P2PServiceError) {
+    async fn handle_error(&mut self, _control: &mut P2PServiceContext, error: P2PServiceError) {
         crate::error!("TestServiceHandler detect error: {:?}", error);
     }
 
     /// Handling session establishment and disconnection events
-    fn handle_event(&mut self, _control: &mut P2PServiceContext, event: P2PServiceEvent) {
+    async fn handle_event(&mut self, _control: &mut P2PServiceContext, event: P2PServiceEvent) {
         match event {
             P2PServiceEvent::SessionOpen {
                 session_context: session,
