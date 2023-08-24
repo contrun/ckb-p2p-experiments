@@ -1,4 +1,4 @@
-use ckb_testkit::{connector::SharedState, ConnectorBuilder};
+use ckb_connector::{ConnectorBuilder, SharedState};
 
 use clap::{crate_version, Arg, Command};
 use p2p::multiaddr::Multiaddr;
@@ -9,9 +9,6 @@ use std::sync::{Arc, RwLock};
 use p2p_node::network::CKBNetworkType;
 use p2p_node::node::P2PNode;
 use p2p_node::Error;
-
-pub use ckb_testkit::ckb_jsonrpc_types;
-pub use ckb_testkit::ckb_types;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

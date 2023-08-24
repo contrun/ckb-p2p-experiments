@@ -1,12 +1,9 @@
 use crate::network::{get_bootnodes, CKBNetworkType};
 
-use ckb_testkit::connector::message::build_discovery_get_nodes;
-use ckb_testkit::{
-    ckb_types::{packed, prelude::*},
-    compress,
-    connector::SharedState,
-    decompress, SupportProtocols,
+use ckb_connector::{
+    compress, decompress, message::build_discovery_get_nodes, SharedState, SupportProtocols,
 };
+use ckb_types::{packed, prelude::*};
 
 use p2p::{
     builder::MetaBuilder as P2PMetaBuilder,

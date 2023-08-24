@@ -7,14 +7,13 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-# ckb-testkit = { git = "https://github.com/nervosnetwork/ckb-integration-test", tag = "v0.0.7", features = ["with_subscribe"] }
-ckb-testkit = { git = "https://github.com/nervosnetwork/ckb-integration-test", tag = "v0.0.7" }
 clap = { version = "4.3.22", features = ["cargo"] }
-ckb-logger-config = "0.110.0"
-ckb-logger-service = "0.110.0"
+ckb-connector = { path = "../connector" }
+ckb-types = "0.110.1"
+ckb-logger-config = "0.110.1"
+ckb-logger-service = "0.110.1"
 log = "0.4.20"
 p2p = { version="0.4.0-alpha.2", package="tentacle", features = ["upnp", "parking_lot"] }
 tokio-util = { version = "0.6", features = ["codec"] }
 thiserror = "1.0.47"
 serde = "1.0.183"
-
