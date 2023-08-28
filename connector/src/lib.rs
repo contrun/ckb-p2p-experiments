@@ -17,8 +17,9 @@ use ckb_stop_handler::{SignalSender, StopHandler};
 use p2p::{
     builder::ServiceBuilder, bytes::Bytes, context::SessionContext, multiaddr::Multiaddr,
     secio::SecioKeyPair, service::ProtocolMeta as P2PProtocolMeta, service::Service as P2PService,
-    service::ServiceAsyncControl as P2PServiceAsyncControl, service::TargetProtocol as P2PTargetProtocol,
-    traits::ServiceHandle as P2PServiceHandle, yamux::Config as YamuxConfig, ProtocolId,
+    service::ServiceAsyncControl as P2PServiceAsyncControl,
+    service::TargetProtocol as P2PTargetProtocol, traits::ServiceHandle as P2PServiceHandle,
+    yamux::Config as YamuxConfig, ProtocolId,
 };
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
@@ -179,6 +180,58 @@ impl ConnectorBuilder {
         for protocol_meta in self.protocol_metas.into_iter() {
             p2p_service_builder = p2p_service_builder.insert_protocol(protocol_meta);
         }
+
+        // Set SO_REUSEPORT and SO_REUSEADDR when this is supported on the running platform and
+        // when there is only only listening address.
+        #[cfg(any(unix, windows))]
+        {
+            use p2p::service::TcpSocket;
+            use p2p::utils::multiaddr_to_socketaddr;
+
+            #[cfg(unix)]
+            use std::os::unix::io::{FromRawFd, IntoRawFd};
+
+            #[cfg(windows)]
+            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
+
+            if self.listening_addresses.len() == 1 {
+                if let Some(addr) = multiaddr_to_socketaddr(&self.listening_addresses[0]) {
+                    p2p_service_builder =
+                        p2p_service_builder.tcp_config(move |socket: TcpSocket| {
+                            let socket = unsafe {
+                                #[cfg(unix)]
+                                let socket = socket2::Socket::from_raw_fd(socket.into_raw_fd());
+                                #[cfg(windows)]
+                                let socket =
+                                    socket2::Socket::from_raw_socket(socket.into_raw_socket());
+                                socket
+                            };
+                            #[cfg(all(
+                                unix,
+                                not(target_os = "solaris"),
+                                not(target_os = "illumos")
+                            ))]
+                            socket.set_reuse_port(true)?;
+                            socket.set_reuse_address(true)?;
+                            match socket.domain() {
+                                Ok(domain) if domain == socket2::Domain::for_address(addr) => {
+                                    socket.bind(&addr.into()).expect("Successfully rebind addr");
+                                }
+                                _ => {}
+                            }
+                            let socket = unsafe {
+                                #[cfg(unix)]
+                                let socket = TcpSocket::from_raw_fd(socket.into_raw_fd());
+                                #[cfg(windows)]
+                                let socket = TcpSocket::from_raw_socket(socket.into_raw_socket());
+                                socket
+                            };
+                            Ok(socket)
+                        });
+                }
+            }
+        }
+
         p2p_service_builder
             .forever(true)
             .key_pair(self.key_pair.clone())

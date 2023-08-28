@@ -285,6 +285,7 @@ dependencies = [
  "futures",
  "log",
  "snap",
+ "socket2 0.5.3",
  "tentacle",
  "tokio",
  "tokio-util",

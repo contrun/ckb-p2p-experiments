@@ -15,3 +15,4 @@ futures = { version = "0.3" }
 snap = "1"
 tokio-util = { version = "0.7", features = ["codec"] }
 log = "0.4"
+socket2 = "0.5"
