@@ -1,0 +1,26 @@
+[package]
+name = "tentacle-ping"
+version = "0.3.9"
+authors = ["Nervos Core Dev <dev@nervos.org>"]
+license = "MIT"
+keywords = ["network", "peer-to-peer", "p2p", "ping"]
+categories = ["network-programming", "asynchronous"]
+repository = "https://github.com/nervosnetwork/tentacle"
+description = "ping protocol implementation for tentacle"
+edition = "2018"
+
+[package.metadata.docs.rs]
+features = []
+all-features = false
+no-default-features = true
+
+[dependencies]
+p2p = { path = "../../tentacle", version = "0.3.0", package = "tentacle" }
+log = "0.4"
+futures = { version = "0.3.0" }
+bytes = "1.0.0"
+molecule = { version = "0.7.0" }
+
+[dev-dependencies]
+env_logger = "0.6.0"
+tokio = { version = "1.0.0", features = ["time", "io-util", "net", "rt-multi-thread"] }
