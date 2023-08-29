@@ -1,6 +1,17 @@
 [workspace]
-
+resolver = "2"
 members = [
-    "p2p-node",
-    "connector",
+  "p2p-node",
+  "connector",
+  "tentacle/yamux",
+  "tentacle/secio",
+  "tentacle/multiaddr",
+  "tentacle/tentacle",
+  "tentacle/bench",
+]
+exclude = [
+  "tentacle/protocols/discovery",
+  "tentacle/protocols/identify",
+  "tentacle/protocols/ping",
+  "tentacle/simple_wasm"
 ]
