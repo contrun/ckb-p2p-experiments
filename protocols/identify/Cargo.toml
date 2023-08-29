@@ -1,0 +1,26 @@
+[package]
+name = "tentacle-identify"
+version = "0.2.10"
+authors = ["Qian Linfeng <thewawar@gmail.com>"]
+license = "MIT"
+description = "p2p identify protocol"
+keywords = ["network", "peer-to-peer", "p2p", "identify"]
+repository = "https://github.com/nervosnetwork/tentacle"
+categories = ["network-programming", "asynchronous"]
+edition = "2018"
+
+[package.metadata.docs.rs]
+features = []
+all-features = false
+no-default-features = true
+
+[dependencies]
+p2p = { path = "../../tentacle", version = "0.3.0", package = "tentacle" }
+bytes = "1.0"
+log = "0.4"
+molecule = { version = "0.7.0" }
+
+[dev-dependencies]
+env_logger = "0.6.0"
+futures = { version = "0.3.0" }
+tokio = { version = "1.0.0", features = ["time", "io-util", "net", "rt-multi-thread" ] }

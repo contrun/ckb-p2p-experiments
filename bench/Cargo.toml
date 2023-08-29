@@ -1,0 +1,22 @@
+[package]
+name = "bench"
+version = "0.1.0"
+authors = ["piaoliu <441594700@qq.com>"]
+edition = "2021"
+
+[lib]
+name = "bench"
+
+[[bin]]
+name = "main"
+path = "./src/main.rs"
+
+[dependencies]
+p2p = { path = "../tentacle", package = "tentacle" }
+rand = "0.8"
+futures = { version = "0.3.0" }
+tokio = { version = "1.0.0", features = ["time", "io-util", "net", "rt-multi-thread"] }
+tokio-util = { version = "0.7.0", features = ["codec"] }
+crossbeam-channel = "0.5"
+env_logger = "0.6.0"
+bytes = "1.0.0"

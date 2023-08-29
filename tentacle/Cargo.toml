@@ -1,0 +1,92 @@
+[package]
+name = "tentacle"
+version = "0.4.2"
+license = "MIT"
+description = "Minimal implementation for a multiplexed p2p network framework."
+authors = ["piaoliu <driftluo@foxmail.com>", "Nervos Core Dev <dev@nervos.org>"]
+repository = "https://github.com/nervosnetwork/tentacle"
+readme = "README.md"
+keywords = ["network", "peer-to-peer"]
+categories = ["network-programming", "asynchronous"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+features = [ "tokio-runtime", "tokio-timer", "upnp", "ws", "unstable", "tls" ]
+all-features = false
+no-default-features = true
+rustc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+yamux = { path = "../yamux", version = "0.3.0", default-features = false, package = "tokio-yamux"}
+secio = { path = "../secio", version = "0.5.0", package = "tentacle-secio" }
+
+futures = { version = "0.3.0" }
+tokio = { version = "1.0.0", features = ["macros"] }
+tokio-util = { version = "0.7.0", features = ["codec"] }
+async-trait = "0.1"
+log = "0.4"
+bytes = "1.0.0"
+thiserror = "1.0"
+once_cell = "1.0"
+nohash-hasher = "0.2"
+
+parking_lot = { version = "0.12", optional = true }
+tokio-tungstenite = { version = "0.16", optional = true }
+futures-timer = { version = "3.0.2", optional = true }
+async-std = { version = "1", features = ["unstable"], optional = true }
+async-io = { version = "1", optional = true }
+
+multiaddr = { path = "../multiaddr", package = "tentacle-multiaddr", version = "0.3.0" }
+molecule = "0.7.0"
+
+# upnp
+igd = { version = "0.12", optional = true }
+
+#tls
+tokio-rustls = { version = "0.23.0", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# rand 0.8 not support wasm32
+rand = "0.8"
+socket2 = { version = "0.4.0", features = ["all"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.7", features = ["minwindef", "ws2def", "winerror", "heapapi"]}
+
+[dev-dependencies]
+env_logger = "0.6.0"
+crossbeam-channel = "0.5"
+systemstat = "0.1.3"
+futures-test = "0.3.5"
+rustls-pemfile = "1"
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { version = "0.24.1", default-features = false, features = ["signal"] }
+
+[features]
+default = ["tokio-runtime", "tokio-timer"]
+ws = ["tokio-tungstenite"]
+tls = ["tokio-rustls"]
+upnp = ["igd"]
+unstable = []
+
+openssl-vendored = ["secio/openssl-vendored"]
+
+# Related to runtime
+
+tokio-timer = ["yamux/tokio-timer", "tokio/time", "tokio-runtime"]
+tokio-runtime = ["tokio/io-util", "tokio/net", "tokio/rt-multi-thread"]
+
+async-timer = ["async-runtime"]
+async-runtime = ["async-std", "async-io", "yamux/generic-timer"]
+
+generic-timer = ["futures-timer", "yamux/generic-timer"]
+wasm-timer = ["futures-timer", "yamux/wasm", "futures-timer/wasm-bindgen"]

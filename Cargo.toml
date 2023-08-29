@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+  "yamux",
+  "secio",
+  "multiaddr",
+  "tentacle",
+  "bench",
+]
+exclude = [
+  "protocols/discovery",
+  "protocols/identify",
+  "protocols/ping",
+  "simple_wasm"
+]
