@@ -4,6 +4,7 @@ use crate::{
     yamux::config::Config as YamuxConfig,
     ProtocolId, SessionId,
 };
+use secio::PublicKey;
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(windows)]
@@ -224,6 +225,12 @@ pub enum TargetSession {
     Multi(Box<dyn Iterator<Item = SessionId> + Send + 'static>),
     /// Try send to some session, if return true, send to it
     Filter(Box<dyn FnMut(&SessionId) -> bool + Send + 'static>),
+    /// Try send to only one
+    SinglePeer(PublicKey),
+    /// Try send to some determined session
+    MultiPeers(Box<dyn Iterator<Item = PublicKey> + Send + 'static>),
+    /// Try send to some session, if return true, send to it
+    FilterPeers(Box<dyn FnMut(&PublicKey) -> bool + Send + 'static>),
 }
 
 impl From<SessionId> for TargetSession {

@@ -83,4 +83,7 @@ pub enum SendErrorKind {
     /// The operation needs to block to complete, but the blocking operation was requested to not occur.
     #[error("would block")]
     WouldBlock,
+    /// Sending failed because not connected to the other side.
+    #[error("not connected")]
+    NotConnected,
 }

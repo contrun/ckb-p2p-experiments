@@ -62,6 +62,8 @@ struct InnerService {
 
     sessions: IntMap<SessionId, SessionController>,
 
+    peers_to_sessions: HashMap<PublicKey, Vec<SessionId>>,
+
     multi_transport: MultiTransport,
 
     listens: HashSet<Multiaddr>,
@@ -181,6 +183,7 @@ where
                     transport
                 },
                 sessions: HashMap::default(),
+                peers_to_sessions: HashMap::default(),
                 service_proto_handles: HashMap::default(),
                 session_proto_handles: HashMap::default(),
                 listens: HashSet::new(),
@@ -424,6 +427,20 @@ impl InnerService {
         Ok(())
     }
 
+    fn get_peer_session_controllers(
+        &mut self,
+        peer: &PublicKey,
+    ) -> impl Iterator<Item = &mut SessionController> {
+        let ids = self.peers_to_sessions.get(peer).cloned().unwrap_or(vec![]);
+        self.sessions
+            .values_mut()
+            .filter(move |context| ids.iter().any(|x| *x == context.inner.id))
+    }
+
+    fn get_peer_session_controller(&mut self, peer: &PublicKey) -> Option<&mut SessionController> {
+        self.get_peer_session_controllers(peer).into_iter().next()
+    }
+
     /// Spawn protocol handle
     #[inline]
     fn session_handles_open(
@@ -479,16 +496,52 @@ impl InnerService {
             // Send data to the specified protocol for the specified session.
             TargetSession::Single(id) => {
                 if let Some(control) = self.sessions.get_mut(&id) {
-                    control.inner.incr_pending_data_size(data.len());
+                    control.inner.incr_pending_data_size(data.clone().len());
                     let _ignore = control
-                        .send(priority, SessionEvent::ProtocolMessage { proto_id, data })
+                        .send(
+                            priority,
+                            SessionEvent::ProtocolMessage {
+                                proto_id,
+                                data: data.clone(),
+                            },
+                        )
+                        .await;
+                }
+            }
+            TargetSession::SinglePeer(peer) => {
+                if let Some(control) = self.get_peer_session_controller(&peer) {
+                    control.inner.incr_pending_data_size(data.clone().len());
+                    let _ignore = control
+                        .send(
+                            priority,
+                            SessionEvent::ProtocolMessage {
+                                proto_id,
+                                data: data.clone(),
+                            },
+                        )
                         .await;
                 }
             }
             TargetSession::Multi(iter) => {
                 for id in iter {
                     if let Some(control) = self.sessions.get_mut(&id) {
-                        control.inner.incr_pending_data_size(data.len());
+                        control.inner.incr_pending_data_size(data.clone().len());
+                        let _ignore = control
+                            .send(
+                                priority,
+                                SessionEvent::ProtocolMessage {
+                                    proto_id,
+                                    data: data.clone(),
+                                },
+                            )
+                            .await;
+                    }
+                }
+            }
+            TargetSession::MultiPeers(iter) => {
+                for peer in iter {
+                    if let Some(control) = self.get_peer_session_controller(&peer) {
+                        control.inner.incr_pending_data_size(data.clone().len());
                         let _ignore = control
                             .send(
                                 priority,
@@ -503,14 +556,13 @@ impl InnerService {
             }
             // Send data to the specified protocol for the specified sessions.
             TargetSession::Filter(mut filter) => {
-                for (id, control) in self.sessions.iter_mut().filter(|(id, _)| filter(id)) {
-                    debug!(
-                        "send message to session [{}], proto [{}], data len: {}",
-                        id,
-                        proto_id,
-                        data.len()
-                    );
-                    control.inner.incr_pending_data_size(data.len());
+                for control in self
+                    .sessions
+                    .iter_mut()
+                    .filter(|(id, _)| filter(id))
+                    .map(|(_, control)| control)
+                {
+                    control.inner.incr_pending_data_size(data.clone().len());
                     let _ignore = control
                         .send(
                             priority,
@@ -520,18 +572,36 @@ impl InnerService {
                             },
                         )
                         .await;
+                }
+            }
+            TargetSession::FilterPeers(mut filter) => {
+                let peers: Vec<PublicKey> = self
+                    .peers_to_sessions
+                    .iter()
+                    .filter(|(peer, _)| filter(peer))
+                    .map(|(peer, _)| peer)
+                    .cloned()
+                    .collect();
+
+                for peer in peers {
+                    if let Some(control) = self.get_peer_session_controller(&peer) {
+                        control.inner.incr_pending_data_size(data.clone().len());
+                        let _ignore = control
+                            .send(
+                                priority,
+                                SessionEvent::ProtocolMessage {
+                                    proto_id,
+                                    data: data.clone(),
+                                },
+                            )
+                            .await;
+                    }
                 }
             }
             // Broadcast data for a specified protocol.
             TargetSession::All => {
-                debug!(
-                    "broadcast message, peer count: {}, proto_id: {}, data len: {}",
-                    self.sessions.len(),
-                    proto_id,
-                    data.len()
-                );
                 for control in self.sessions.values_mut() {
-                    control.inner.incr_pending_data_size(data.len());
+                    control.inner.incr_pending_data_size(data.clone().len());
                     let _ignore = control
                         .send(
                             priority,
@@ -543,7 +613,7 @@ impl InnerService {
                         .await;
                 }
             }
-        }
+        };
     }
 
     /// Handshake
@@ -617,11 +687,12 @@ impl InnerService {
         if let Some(ref key) = remote_pubkey {
             // If a connection to the same address has been established with the same
             // public key, then this duplicated connection will be closed.
-            match self.sessions.values().find(|&context| {
-                context.inner.remote_pubkey.as_ref() == Some(key)
-                    && context.inner.address == address
-            }) {
-                Some(context) => {
+            match self
+                .sessions
+                .values()
+                .find(|&context| context.inner.remote_pubkey.as_ref() == Some(key))
+            {
+                Some(context) if context.inner.address == address => {
                     trace!("Connected to the connected node");
                     crate::runtime::spawn(async move {
                         let _ignore = handle.shutdown().await;
@@ -645,6 +716,7 @@ impl InnerService {
                     }
                     return;
                 }
+                Some(_context) => {}
                 None => {
                     // if peer id doesn't match return an error
                     if let Some(peer_id) = extract_peer_id(&address) {
@@ -678,13 +750,20 @@ impl InnerService {
                 self.next_session,
                 address,
                 ty,
-                remote_pubkey,
+                remote_pubkey.clone(),
                 session_closed,
                 pending_data_size,
             )),
         );
 
         let session_context = session_control.inner.clone();
+
+        if let Some(key) = remote_pubkey {
+            self.peers_to_sessions
+                .entry(key)
+                .or_insert(vec![])
+                .push(session_control.inner.id);
+        }
 
         // must insert here, otherwise, the session protocol handle cannot be opened
         self.sessions
@@ -775,6 +854,16 @@ impl InnerService {
     async fn session_close(&mut self, id: SessionId, source: Source) {
         if source == Source::External {
             if let Some(control) = self.sessions.get_mut(&id) {
+                if let Some(ref key) = control.inner.remote_pubkey {
+                    self.peers_to_sessions
+                        .entry(key.clone())
+                        .and_modify(|v| v.retain(|&x| x != control.inner.id));
+                    if let Some(v) = self.peers_to_sessions.get(key) {
+                        if v.is_empty() {
+                            self.peers_to_sessions.remove(key);
+                        }
+                    }
+                }
                 debug!("try close service session [{}] ", id);
                 let _ignore = control
                     .send(Priority::High, SessionEvent::SessionClose { id })
