@@ -28,7 +28,8 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction(transaction, cycles);
-        self.send(node_addr, relay_protocol, message.as_bytes()).await?;
+        self.send(node_addr, relay_protocol, message.as_bytes())
+            .await?;
         Ok(())
     }
 
@@ -43,7 +44,8 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction_hashes(hashes);
-        self.send(node_addr, relay_protocol, message.as_bytes()).await?;
+        self.send(node_addr, relay_protocol, message.as_bytes())
+            .await?;
         Ok(())
     }
 
@@ -61,7 +63,8 @@ impl Connector {
             listening_addresses,
             observed_address,
         );
-        self.send(node_addr, SupportProtocols::Identify, message.as_bytes()).await?;
+        self.send(node_addr, SupportProtocols::Identify, message.as_bytes())
+            .await?;
         Ok(())
     }
 
@@ -73,7 +76,8 @@ impl Connector {
         self_defined_flag: u32,
     ) -> Result<(), String> {
         let discovery = build_discovery_get_nodes(listening_port, max_nodes, self_defined_flag);
-        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes()).await?;
+        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes())
+            .await?;
         Ok(())
     }
 
@@ -84,7 +88,8 @@ impl Connector {
         addresses: Vec<Multiaddr>,
     ) -> Result<(), String> {
         let message = build_discovery_nodes(active_push, addresses);
-        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes()).await?;
+        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes())
+            .await?;
         Ok(())
     }
 

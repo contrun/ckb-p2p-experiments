@@ -98,12 +98,6 @@ impl ConnectorBuilder {
         self
     }
 
-    /// ```rust
-    /// use super::util::find_available_port;
-    ///
-    /// let p2p_port = find_available_port();
-    /// let p2p_listening_address = format!("/ip4/127.0.0.1/tcp/{}", p2p_port).parse().unwrap();
-    /// ```
     pub fn listening_addresses(mut self, listening_addresses: Vec<Multiaddr>) -> Self {
         self.listening_addresses = listening_addresses;
         self
