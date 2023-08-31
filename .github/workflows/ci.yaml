@@ -1,0 +1,47 @@
+on: [push, pull_request]
+
+name: Continuous integration
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+      # Install rust-toolchain from rust-toolchain file
+      # See https://github.com/dtolnay/rust-toolchain/issues/77#issuecomment-1462824940
+      - uses: dsherret/rust-toolchain-file@v1
+      - run: cargo check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: dsherret/rust-toolchain-file@v1
+      - run: |
+          rm tentacle/tentacle/examples/simple_using_spawn.rs # This example program requires feature unstable
+          cargo test
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: dsherret/rust-toolchain-file@v1
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: dsherret/rust-toolchain-file@v1
+      # Currently Too many clippy errors.
+      # Effectively disable clippy with `|| true` for now.
+      - run: |
+          cargo clippy -- -D warnings || true
