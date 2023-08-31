@@ -615,13 +615,12 @@ impl InnerService {
             .remove(&address)
             .unwrap_or(TargetProtocol::All);
         if let Some(ref key) = remote_pubkey {
-            // If the public key exists, the connection has been established
-            // and then the useless connection needs to be closed.
-            match self
-                .sessions
-                .values()
-                .find(|&context| context.inner.remote_pubkey.as_ref() == Some(key))
-            {
+            // If a connection to the same address has been established with the same
+            // public key, then this duplicated connection will be closed.
+            match self.sessions.values().find(|&context| {
+                context.inner.remote_pubkey.as_ref() == Some(key)
+                    && context.inner.address == address
+            }) {
                 Some(context) => {
                     trace!("Connected to the connected node");
                     crate::runtime::spawn(async move {
