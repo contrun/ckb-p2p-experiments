@@ -1,5 +1,4 @@
 use futures::prelude::*;
-use secio::PublicKey;
 
 use std::time::Duration;
 use std::{
@@ -115,28 +114,6 @@ impl ServiceControl {
         data: Bytes,
     ) -> Result {
         self.quick_filter_broadcast(TargetSession::Single(session_id), proto_id, data)
-    }
-
-    /// Send message
-    #[inline]
-    pub fn send_message_to_peer(
-        &self,
-        peer: PublicKey,
-        proto_id: ProtocolId,
-        data: Bytes,
-    ) -> Result {
-        self.filter_broadcast(TargetSession::SinglePeer(peer), proto_id, data)
-    }
-
-    /// Send message on quick channel
-    #[inline]
-    pub fn quick_send_message_to_peer(
-        &self,
-        peer: PublicKey,
-        proto_id: ProtocolId,
-        data: Bytes,
-    ) -> Result {
-        self.quick_filter_broadcast(TargetSession::SinglePeer(peer), proto_id, data)
     }
 
     /// Send data to the specified protocol for the specified sessions.
@@ -377,30 +354,6 @@ impl ServiceAsyncControl {
         data: Bytes,
     ) -> Result {
         self.quick_filter_broadcast(TargetSession::Single(session_id), proto_id, data)
-            .await
-    }
-
-    /// Send message
-    #[inline]
-    pub async fn send_message_to_peer(
-        &self,
-        peer: PublicKey,
-        proto_id: ProtocolId,
-        data: Bytes,
-    ) -> Result {
-        self.filter_broadcast(TargetSession::SinglePeer(peer), proto_id, data)
-            .await
-    }
-
-    /// Send message on quick channel
-    #[inline]
-    pub async fn quick_send_message_to_peer(
-        &self,
-        peer: PublicKey,
-        proto_id: ProtocolId,
-        data: Bytes,
-    ) -> Result {
-        self.quick_filter_broadcast(TargetSession::SinglePeer(peer), proto_id, data)
             .await
     }
 
