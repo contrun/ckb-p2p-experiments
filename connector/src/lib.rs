@@ -8,6 +8,8 @@ mod simple_service_handler;
 mod support_protocols;
 
 pub use compress::{compress, decompress};
+use p2p::secio::PeerId;
+use p2p::SessionId;
 pub use shared::SharedState;
 pub use simple_protocol_handler::SimpleProtocolHandler;
 pub use simple_service_handler::SimpleServiceHandler;
@@ -25,6 +27,23 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+
+/// There are server ways to identify a session (a connection to remote peer).
+/// `SessionId` is a obscure integer generated and given out by tentacle.
+/// This number is not useful by itself as it contains no information about the remote peer.
+/// `MultiAddr` is the transport address that the actual network connection uses.
+/// `PeerId` is the id of the remote peer.
+/// We should normally use `PeerId` to identify the network session that we want to use,
+/// as there may exist many network session that corresponds to connection to the same peer.
+/// Some are relayed connections, while some are direct connections.
+/// In some case where the remote peer's id is not known before-hand, we can use,
+/// `Multiaddr` or `SessionId` to identify the network session.
+#[derive(Debug, Copy, Clone)]
+pub enum IdentifySessionBy<'a> {
+    SessionId(SessionId),
+    Multiaddr(&'a Multiaddr),
+    PeerId(&'a PeerId),
+}
 
 /// Connector Builder
 pub struct ConnectorBuilder {
@@ -252,7 +271,9 @@ impl Connector {
         let start_time = Instant::now();
         let mut last_logging_time = Instant::now();
         while start_time.elapsed() <= Duration::from_secs(5) {
-            if let Some(opened_protocol_ids) = self.get_opened_protocol_ids(node_addr) {
+            if let Some(opened_protocol_ids) =
+                self.get_opened_protocol_ids(IdentifySessionBy::Multiaddr(node_addr))
+            {
                 let expected_opened = self
                     .p2p_service_controller
                     .protocols()
@@ -296,40 +317,41 @@ impl Connector {
     /// Send `data` through the protocol of the session
     pub async fn send(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         protocol: SupportProtocols,
         data: Bytes,
     ) -> Result<(), String> {
         let session = self
-            .get_session(node_addr)
-            .ok_or_else(|| format!("The connection was disconnected to \"{}\"", node_addr))?;
+            .get_session(session)
+            .ok_or_else(|| format!("The connection to {:?} not found", session))?;
         self.p2p_service_controller
             .send_message_to(session.id, protocol.protocol_id(), data)
             .await
             .map_err(|err| {
                 format!(
-                    "Connector send message under protocol \"{}\" to \"{}\", error: {:?}",
+                    "Connector send message under protocol \"{}\" to {:?}, error: {:?}",
                     protocol.name(),
-                    node_addr,
+                    session,
                     err
                 )
             })
     }
 
     /// Return the session corresponding to the `node` if connected.
-    pub fn get_session(&self, node_addr: &Multiaddr) -> Option<SessionContext> {
+    pub fn get_session(&self, session: IdentifySessionBy<'_>) -> Option<SessionContext> {
         if let Ok(shared) = self.shared.read() {
-            return shared.get_session(node_addr);
+            return shared.get_session(session);
         }
         unreachable!()
     }
 
     /// Return the opened protocols of the session corresponding to the `node` if connected
-    pub fn get_opened_protocol_ids(&self, node_addr: &Multiaddr) -> Option<Vec<ProtocolId>> {
+    pub fn get_opened_protocol_ids(
+        &self,
+        session: IdentifySessionBy<'_>,
+    ) -> Option<Vec<ProtocolId>> {
         if let Ok(shared) = self.shared.read() {
-            return shared
-                .get_session(node_addr)
-                .and_then(|session| shared.get_opened_protocol_ids(&session.id));
+            return shared.get_opened_protocol_ids(session);
         }
         unreachable!()
     }

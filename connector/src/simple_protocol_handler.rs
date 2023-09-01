@@ -1,3 +1,5 @@
+use crate::IdentifySessionBy;
+
 use super::compress::{compress, decompress};
 use super::SharedState;
 use super::SupportProtocols;
@@ -73,7 +75,10 @@ impl P2PServiceProtocol for SimpleProtocolHandler {
         );
         if let Ok(shared) = self.shared.write() {
             let sender = shared
-                .get_protocol_sender(&context.session.id, &context.proto_id())
+                .get_protocol_sender(
+                    IdentifySessionBy::SessionId(context.session.id),
+                    &context.proto_id(),
+                )
                 .unwrap_or_else(|| {
                     panic!("received message but shared.get_protocol_sender returns None")
                 });

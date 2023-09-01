@@ -1,3 +1,5 @@
+use crate::IdentifySessionBy;
+
 use super::{
     message::{
         build_discovery_get_nodes, build_discovery_nodes, build_identify_message,
@@ -18,7 +20,7 @@ use std::time::Duration;
 impl Connector {
     pub async fn send_relay_transaction(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         relay_protocol: SupportProtocols,
         transaction: &TransactionView,
         cycles: Cycle,
@@ -28,14 +30,14 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction(transaction, cycles);
-        self.send(node_addr, relay_protocol, message.as_bytes())
+        self.send(session, relay_protocol, message.as_bytes())
             .await?;
         Ok(())
     }
 
     pub async fn send_relay_transaction_hash(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         relay_protocol: SupportProtocols,
         hashes: Vec<packed::Byte32>,
     ) -> Result<(), String> {
@@ -44,14 +46,14 @@ impl Connector {
                 || relay_protocol.protocol_id() == SupportProtocols::RelayV2.protocol_id()
         );
         let message = build_relay_transaction_hashes(hashes);
-        self.send(node_addr, relay_protocol, message.as_bytes())
+        self.send(session, relay_protocol, message.as_bytes())
             .await?;
         Ok(())
     }
 
     pub async fn send_identify_message(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         network_identifier: &str,
         client_version: &str,
         listening_addresses: Vec<Multiaddr>,
@@ -63,52 +65,49 @@ impl Connector {
             listening_addresses,
             observed_address,
         );
-        self.send(node_addr, SupportProtocols::Identify, message.as_bytes())
+        self.send(session, SupportProtocols::Identify, message.as_bytes())
             .await?;
         Ok(())
     }
 
     pub async fn send_discovery_get_nodes(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         listening_port: Option<u16>,
         max_nodes: u32,
         self_defined_flag: u32,
     ) -> Result<(), String> {
         let discovery = build_discovery_get_nodes(listening_port, max_nodes, self_defined_flag);
-        self.send(node_addr, SupportProtocols::Discovery, discovery.as_bytes())
+        self.send(session, SupportProtocols::Discovery, discovery.as_bytes())
             .await?;
         Ok(())
     }
 
     pub async fn send_discovery_nodes(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         active_push: bool,
         addresses: Vec<Multiaddr>,
     ) -> Result<(), String> {
         let message = build_discovery_nodes(active_push, addresses);
-        self.send(node_addr, SupportProtocols::Discovery, message.as_bytes())
+        self.send(session, SupportProtocols::Discovery, message.as_bytes())
             .await?;
         Ok(())
     }
 
     pub fn recv(
         &self,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         protocol: &SupportProtocols,
     ) -> Result<Bytes, String> {
-        let session = self
-            .get_session(node_addr)
-            .ok_or(format!("session to {} is notfound", node_addr))?;
         let receiver = {
             let shared = self.shared.read().unwrap();
             shared
-                .get_protocol_receiver(&session.id, &protocol.protocol_id())
+                .get_protocol_receiver(session, &protocol.protocol_id())
                 .ok_or(format!(
-                    "protocol \"{}\" to {} is notfound",
+                    "protocol \"{}\" to {:?} is not found",
                     protocol.name(),
-                    node_addr
+                    session,
                 ))?
         };
         receiver.recv().map_err(|err| format!("{:?}", err))
@@ -117,20 +116,17 @@ impl Connector {
     pub fn recv_timeout(
         &self,
         timeout: Duration,
-        node_addr: &Multiaddr,
+        session: IdentifySessionBy<'_>,
         protocol: &SupportProtocols,
     ) -> Result<Bytes, String> {
-        let session = self
-            .get_session(node_addr)
-            .ok_or(format!("session to {} is notfound", node_addr))?;
         let receiver = {
             let shared = self.shared.read().unwrap();
             shared
-                .get_protocol_receiver(&session.id, &protocol.protocol_id())
+                .get_protocol_receiver(session, &protocol.protocol_id())
                 .ok_or(format!(
-                    "protocol \"{}\" to {} is notfound",
+                    "protocol \"{}\" to {:?} is not found",
                     protocol.name(),
-                    node_addr
+                    session
                 ))?
         };
         receiver
