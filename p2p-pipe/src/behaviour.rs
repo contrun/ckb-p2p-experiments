@@ -4,5 +4,5 @@ use libp2p::{gossipsub, mdns, swarm::NetworkBehaviour};
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
     gossipsub: gossipsub::Behaviour,
-    mdns: mdns::async_io::Behaviour,
+    mdns: mdns::tokio::Behaviour,
 }

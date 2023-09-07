@@ -1,16 +1,19 @@
-use futures::{future::Either, prelude::*, select};
+use futures::{future::Either, prelude::*};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity, mdns, noise, quic,
+    gossipsub, identity,
+    kad::{record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryResult},
+    mdns, noise, quic,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::time::Duration;
-use tokio::io;
+use tokio::{io, time};
 
 use tokio_util::codec::{FramedRead, LinesCodec};
 
@@ -18,8 +21,34 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
     gossipsub: gossipsub::Behaviour,
-    mdns: mdns::async_io::Behaviour,
+    mdns: mdns::tokio::Behaviour,
+    kademlia: Kademlia<MemoryStore>,
 }
+
+const GOSSIPSUB_TOPIC_NAME: &str = "test-gossipsub-topic";
+const KADEMLIA_PROVIDE_NAME: &str = "test-kademlia-provides";
+const BOOTNODES: [(&str, &str); 5] = [
+    (
+        "/dnsaddr/bootstrap.libp2p.io",
+        "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    ),
+    (
+        "/dnsaddr/bootstrap.libp2p.io",
+        "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    ),
+    (
+        "/dnsaddr/bootstrap.libp2p.io",
+        "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+    ),
+    (
+        "/dnsaddr/bootstrap.libp2p.io",
+        "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+    ),
+    (
+        "/ip4/104.131.131.82/tcp/4001",
+        "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+    ), // mars.i.ipfs.io
+];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -29,13 +58,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {local_peer_id}");
 
     // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
+    let tcp_transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
         .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
-    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));
+    let quic_transport = quic::tokio::Transport::new(quic::Config::new(&id_keys));
     let transport = OrTransport::new(quic_transport, tcp_transport)
         .map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -65,17 +94,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .expect("Correct configuration");
     // Create a Gossipsub topic
-    let topic = gossipsub::IdentTopic::new("test-net");
+    let topic = gossipsub::IdentTopic::new(GOSSIPSUB_TOPIC_NAME);
     // subscribes to our topic
     gossipsub.subscribe(&topic)?;
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let behaviour = MyBehaviour { gossipsub, mdns };
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)?;
+        let mut kademlia = Kademlia::new(local_peer_id, MemoryStore::new(local_peer_id));
+        for (addr, id) in &BOOTNODES {
+            kademlia.add_address(
+                &PeerId::from_str(id).unwrap(),
+                Multiaddr::from_str(addr).unwrap(),
+            );
+        }
+        kademlia.bootstrap().unwrap();
+        kademlia
+            .start_providing(KADEMLIA_PROVIDE_NAME.as_bytes().to_vec().into())
+            .unwrap();
+        let behaviour = MyBehaviour {
+            gossipsub,
+            mdns,
+            kademlia,
+        };
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
+    let mut interval = time::interval(time::Duration::from_secs(30));
     // Read full lines from stdin
     let mut stdin = FramedRead::new(io::stdin(), LinesCodec::new()).fuse();
 
@@ -84,10 +129,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
-
     // Kick it off
     loop {
-        select! {
+        tokio::select! {
+            _ = interval.tick() => {
+                println!("ticked");
+                let _query_id = swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .get_providers(KADEMLIA_PROVIDE_NAME.as_bytes().to_vec().into());
+
+            },
             line = stdin.select_next_some() => {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
@@ -118,7 +170,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     ),
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Local node is listening on {address}");
-                }
+                },
+
+            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(
+                KademliaEvent::OutboundQueryProgressed {
+                    id: _,
+                    result:
+                        QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                            providers, ..
+                        })),
+                    ..
+                },
+            )) => {
+                println!("Obatained list of providers: {providers:?}");
+            },
                 _ => {}
             }
         }
