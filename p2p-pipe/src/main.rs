@@ -1,8 +1,8 @@
 use futures::{future::Either, prelude::*};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity,
-    kad::{record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryResult},
+    dns, gossipsub, identity,
+    kad::{record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, Mode, QueryResult},
     mdns, noise, quic,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
@@ -57,20 +57,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(id_keys.public());
     println!("Local peer id: {local_peer_id}");
 
-    // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
-    let tcp_transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
-        .upgrade(upgrade::Version::V1Lazy)
-        .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
-        .multiplex(yamux::Config::default())
-        .timeout(std::time::Duration::from_secs(20))
-        .boxed();
-    let quic_transport = quic::tokio::Transport::new(quic::Config::new(&id_keys));
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
+    let transport = {
+        let tcp_transport =
+            tcp::tokio::Transport::new(tcp::Config::new().port_reuse(true).nodelay(true))
+                .upgrade(upgrade::Version::V1)
+                .authenticate(noise::Config::new(&id_keys)?)
+                .multiplex(yamux::Config::default())
+                .timeout(Duration::from_secs(20));
+
+        let quic_transport = {
+            let mut config = quic::Config::new(&id_keys);
+            config.support_draft_29 = true;
+            quic::tokio::Transport::new(config)
+        };
+
+        dns::TokioDnsConfig::system(OrTransport::new(quic_transport, tcp_transport))?
+            .map(|either_output, _| match either_output {
+                Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+                Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            })
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .boxed()
+    };
 
     // To content-address message, we can take the hash of message and use it as an ID.
     let message_id_fn = |message: &gossipsub::Message| {
@@ -112,6 +120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         kademlia
             .start_providing(KADEMLIA_PROVIDE_NAME.as_bytes().to_vec().into())
             .unwrap();
+        kademlia.set_mode(Some(Mode::Server));
         let behaviour = MyBehaviour {
             gossipsub,
             mdns,
@@ -138,7 +147,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .behaviour_mut()
                     .kademlia
                     .get_providers(KADEMLIA_PROVIDE_NAME.as_bytes().to_vec().into());
-
             },
             line = stdin.select_next_some() => {
                 if let Err(e) = swarm
@@ -147,44 +155,47 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("Publish error: {e:?}");
                 }
             },
-            event = swarm.select_next_some() => match event {
-                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
-                    for (peer_id, _multiaddr) in list {
-                        println!("mDNS discovered a new peer: {peer_id}");
-                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                    }
-                },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
-                    for (peer_id, _multiaddr) in list {
-                        println!("mDNS discover peer has expired: {peer_id}");
-                        swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
-                    }
-                },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(gossipsub::Event::Message {
-                    propagation_source: peer_id,
-                    message_id: id,
-                    message,
-                })) => println!(
-                        "Got message: '{}' with id: {id} from peer: {peer_id}",
-                        String::from_utf8_lossy(&message.data),
-                    ),
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Local node is listening on {address}");
-                },
+            event = swarm.select_next_some() => {
+                // dbg!(&event);
+                match event {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                        for (peer_id, _multiaddr) in list {
+                            println!("mDNS discovered a new peer: {peer_id}");
+                            swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                        }
+                    },
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                        for (peer_id, _multiaddr) in list {
+                            println!("mDNS discover peer has expired: {peer_id}");
+                            swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                        }
+                    },
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                        propagation_source: peer_id,
+                        message_id: id,
+                        message,
+                    })) => println!(
+                            "Got message: '{}' with id: {id} from peer: {peer_id}",
+                            String::from_utf8_lossy(&message.data),
+                        ),
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Local node is listening on {address}");
+                    },
 
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(
-                KademliaEvent::OutboundQueryProgressed {
-                    id: _,
-                    result:
-                        QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
-                            providers, ..
-                        })),
-                    ..
-                },
-            )) => {
-                println!("Obatained list of providers: {providers:?}");
-            },
-                _ => {}
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(
+                        KademliaEvent::OutboundQueryProgressed {
+                            id: _,
+                            result:
+                                QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                                    providers, ..
+                                })),
+                            ..
+                        },
+                    )) => {
+                        println!("Obatained list of providers: {providers:?}");
+                    },
+                        _ => {}
+                    }
             }
         }
     }

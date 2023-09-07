@@ -10,5 +10,5 @@ async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
 tokio = { version = "1", features = ["full"] }
-libp2p = { version = "0.52.3", features = ["tokio", "kad", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }
+libp2p = { version = "0.52.3", features = ["tokio", "dns", "rsa", "kad", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }
 tokio-util = { version = "0.7.8", features = ["full"] }
