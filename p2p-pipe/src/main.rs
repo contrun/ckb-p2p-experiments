@@ -60,6 +60,8 @@ const BOOTNODES: [(&str, &str); 6] = [
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let _ = env_logger::try_init();
+
     // Create a random PeerId
     let id_keys = identity::Keypair::generate_ed25519();
     let pub_key = id_keys.public();
