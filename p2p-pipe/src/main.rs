@@ -61,9 +61,14 @@ const BOOTNODES: [(&str, &str); 6] = [
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = env_logger::try_init();
-
-    // Create a random PeerId
-    let id_keys = identity::Keypair::generate_ed25519();
+    let id_keys = if let Ok(privkey) = std::env::var("PRIVKEY") {
+        let bytes = hex::decode(privkey).unwrap();
+        identity::Keypair::from_protobuf_encoding(&bytes).unwrap()
+    } else {
+        // Create a random PeerId
+        identity::Keypair::generate_ed25519()
+    };
+    dbg!(hex::encode(&id_keys.to_protobuf_encoding().unwrap()));
     let pub_key = id_keys.public();
     let local_peer_id = PeerId::from(pub_key.clone());
     println!("Local peer id: {local_peer_id}");

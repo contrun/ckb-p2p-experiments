@@ -2866,6 +2866,7 @@ dependencies = [
  "async-trait",
  "env_logger 0.10.0",
  "futures",
+ "hex",
  "libp2p",
  "log",
  "tokio",
