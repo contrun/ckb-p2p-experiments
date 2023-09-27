@@ -150,7 +150,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
-    let mut interval = time::interval(time::Duration::from_secs(30));
+    let start = time::Instant::now() + time::Duration::from_secs(60);
+    let mut interval = time::interval_at(start, time::Duration::from_secs(30));
     // Read full lines from stdin
     let mut stdin = FramedRead::new(io::stdin(), LinesCodec::new()).fuse();
 
@@ -231,7 +232,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             ..
                         },
                     )) => {
-                        println!("Obatained list of providers: {providers:?}");
+                        println!("Obtained list of providers: {providers:?}");
                     },
                     SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(_)) => {
                         // dbg!(&event);
