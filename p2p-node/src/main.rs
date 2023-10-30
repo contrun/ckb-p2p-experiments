@@ -58,7 +58,56 @@ async fn libp2p_main(
     _network_type: CKBNetworkType,
     _listening_address: Multiaddr,
 ) -> Result<(), Error> {
-    unimplemented!("libp2p is currently not implemented");
+    use futures::io::{AsyncReadExt, AsyncWriteExt};
+    use libp2p::core::upgrade::InboundConnectionUpgrade;
+    use libp2p::identity;
+    use libp2p::plaintext;
+    use log::debug;
+
+    let msg_to_send = b"hello world".to_vec();
+    let msg_to_receive = msg_to_send.clone();
+
+    let server_id = identity::Keypair::generate_ed25519();
+    let client_id = identity::Keypair::generate_ed25519();
+
+    let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
+
+    futures::executor::block_on(async {
+        let ((received_client_id, mut server_channel), (received_server_id, mut client_channel)) =
+            futures::future::try_join(
+                plaintext::Config::new(&server_id).upgrade_inbound(server, ""),
+                plaintext::Config::new(&client_id).upgrade_inbound(client, ""),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(received_server_id, server_id.public().to_peer_id());
+        assert_eq!(received_client_id, client_id.public().to_peer_id());
+
+        let client_fut = async {
+            debug!("Client: writing message.");
+            client_channel
+                .write_all(&msg_to_send)
+                .await
+                .expect("no error");
+            debug!("Client: flushing channel.");
+            client_channel.flush().await.expect("no error");
+        };
+
+        let server_fut = async {
+            let mut server_buffer = vec![0; msg_to_receive.len()];
+            debug!("Server: reading message.");
+            server_channel
+                .read_exact(&mut server_buffer)
+                .await
+                .expect("reading client message");
+
+            assert_eq!(server_buffer, msg_to_receive);
+        };
+
+        futures::future::join(server_fut, client_fut).await;
+    });
+    Ok(())
 }
 
 async fn tentacle_main(

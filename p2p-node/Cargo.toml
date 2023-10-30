@@ -17,3 +17,6 @@ p2p = { path = "../tentacle/tentacle", package  = "tentacle", features = ["upnp"
 tokio-util = { version = "0.7", features = ["codec"] }
 thiserror = "1.0.47"
 serde = "1.0.183"
+libp2p = { version = "0.52.4", features = ["full"] }
+futures = "0.3.29"
+futures_ringbuf = "0.4.0"
