@@ -10,6 +10,28 @@ use p2p_node::network::CKBNetworkType;
 use p2p_node::node::P2PNode;
 use p2p_node::Error;
 
+use serde::Deserialize;
+
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub enum NodeBackend {
+    Tentacle,
+    Libp2p,
+}
+
+impl TryFrom<&str> for NodeBackend {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "tentacle" => Ok(NodeBackend::Tentacle),
+            "libp2p" => Ok(NodeBackend::Libp2p),
+            _ => Err(format!(
+                "Unknown backend {}, only tentacle and libp2p are supported",
+                s
+            )),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let _logger_guard = init_logger();
@@ -20,7 +42,29 @@ async fn main() -> Result<(), Error> {
     let listening_address = Multiaddr::try_from(address.as_str()).unwrap();
     let network = matches.get_one::<String>("network").unwrap();
     let network_type = CKBNetworkType::try_from(network.as_str()).unwrap();
+    let backend = matches
+        .get_one::<String>("backend")
+        .and_then(|b| NodeBackend::try_from(b.as_str()).ok())
+        .unwrap();
 
+    match backend {
+        NodeBackend::Tentacle => tentacle_main(network_type, listening_address).await?,
+        NodeBackend::Libp2p => libp2p_main(network_type, listening_address).await?,
+    }
+    Ok(())
+}
+
+async fn libp2p_main(
+    _network_type: CKBNetworkType,
+    _listening_address: Multiaddr,
+) -> Result<(), Error> {
+    unimplemented!("libp2p is currently not implemented");
+}
+
+async fn tentacle_main(
+    network_type: CKBNetworkType,
+    listening_address: Multiaddr,
+) -> Result<(), Error> {
     log::info!(
         "Start listening for network {:?} at {}",
         network_type,
@@ -61,6 +105,11 @@ pub fn clap_app() -> Command {
     Command::new("ckb-p2p-node")
         .version(crate_version!())
         .args([
+            Arg::new("backend")
+                .long("backend")
+                .value_name("BACKEND")
+                .required(false)
+                .default_values(["tentacle"]),
             Arg::new("network")
                 .long("network")
                 .value_name("NETWORK")
